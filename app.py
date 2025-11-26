@@ -4,7 +4,7 @@ import requests
 
 # 🔗 Your n8n webhook URL (POST)
 # Example: "https://sudha-mad-max-1997.app.n8n.cloud/webhook/generate-app"
-N8N_WEBHOOK_URL = "https://YOUR-N8N-URL/webhook/generate-app"
+N8N_WEBHOOK_URL = "https://sudha-mad-max-1997.app.n8n.cloud/webhook-test/8cf103a1-e3bb-4c4d-9f95-19a3ad2e61a0"
 
 
 def call_n8n_generate_code(prompt: str, mode: str) -> str:
