@@ -2,14 +2,16 @@ import streamlit as st
 import requests
 
 
-# 🔗 Your n8n webhook URL (POST)
-# Example: "https://sudha-mad-max-1997.app.n8n.cloud/webhook/generate-app"
-N8N_WEBHOOK_URL = "https://sudha-mad-max-1997.app.n8n.cloud/webhook-test/8cf103a1-e3bb-4c4d-9f95-19a3ad2e61a0"
+# 🔗 Your n8n webhook URL (PRODUCTION, not test URL!)
+# Example:
+# N8N_WEBHOOK_URL = "https://sudha-mad-max-1997.app.n8n.cloud/webhook/generate-app"
+N8N_WEBHOOK_URL = "https://YOUR-N8N-URL/webhook/generate-app"
 
 
 def call_n8n_generate_code(prompt: str, mode: str) -> str:
     """
     Send the user's prompt + mode to n8n and get back generated Python code.
+
     mode: "app" or "game"
     Returns the code as a string, or "" on failure.
     """
@@ -36,8 +38,8 @@ def main():
 
     st.title("🧠 AI-Powered Web App / Game Generator")
     st.write(
-        "Describe the app or game you want in plain English.\n"
-        "This tool will send your idea to an n8n workflow, which uses an LLM to generate Streamlit code.\n"
+        "Describe the app or game you want in plain English. "
+        "This tool will send your idea to an n8n workflow, which uses an LLM to generate Streamlit code. "
         "You can then run the generated app directly below."
     )
 
@@ -47,8 +49,8 @@ def main():
         st.markdown(
             """
             1. Enter an idea for an app or game  
-            2. Choose *App* or *Game* mode  
-            3. Click **Generate Code** (via n8n + LLM)  
+            2. Choose **App** or **Game** mode  
+            3. Click **Generate Code** (calls n8n + LLM)  
             4. Click **Run Generated App** to execute it  
             """
         )
@@ -70,7 +72,10 @@ def main():
 
     mode_label = st.radio(
         "Select generation type:",
-        options=["Generate App (tkinter-style utility)", "Generate Game (pygame-style logic)"],
+        options=[
+            "Generate App (tkinter-style utility)",
+            "Generate Game (pygame-style logic)",
+        ],
         index=0,
         horizontal=True,
     )
@@ -96,7 +101,10 @@ def main():
                 with st.spinner("Generating code via n8n + LLM..."):
                     code = call_n8n_generate_code(prompt.strip(), mode_value)
                     if not code:
-                        st.error("No code received from n8n. Check your n8n workflow or logs.")
+                        st.error(
+                            "No code received from n8n. "
+                            "Check your n8n workflow, AI Agent output, or logs."
+                        )
                     else:
                         st.session_state["generated_code"] = code
                         st.success("✅ Code generated successfully!")
@@ -109,17 +117,23 @@ def main():
                 st.warning("Generate the code first before trying to run the app.")
             else:
                 st.info("Running generated app below...")
-                local_ns = {}
+
+                # Single namespace for exec; pre-inject Streamlit
+                # so 'st' is always defined inside generated code.
+                local_ns = {"st": st}
+
                 try:
-                    # Execute generated code in an isolated local namespace
-                    exec(code, {}, local_ns)
+                    # Execute generated code; imports and functions will land in local_ns
+                    exec(code, local_ns, local_ns)
+
                     render_func = local_ns.get("render_app")
                     if callable(render_func):
                         render_func()
                     else:
                         st.error(
                             "render_app() function not found in generated code.\n"
-                            "Ensure your n8n AI Agent always defines def render_app(): ..."
+                            "Ensure your n8n AI Agent always defines:\n"
+                            "    def render_app():\n"
                         )
                 except Exception as e:
                     st.error(f"Error while running the generated app: {e}")
