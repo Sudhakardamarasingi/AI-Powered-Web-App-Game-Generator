@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
+import traceback
 
-# 🔗 Your n8n webhook URL (PRODUCTION)
+# 🔗 Your n8n PRODUCTION webhook URL (not the test URL)
 # Example:
 N8N_WEBHOOK_URL = "https://sudha-mad-max-1997.app.n8n.cloud/webhook/8cf103a1-e3bb-4c4d-9f95-19a3ad2e61a0"
 
@@ -10,6 +11,7 @@ N8N_WEBHOOK_URL = "https://sudha-mad-max-1997.app.n8n.cloud/webhook/8cf103a1-e3b
 def call_n8n_generate_code(prompt: str, mode: str) -> str:
     """
     Send the user's prompt + mode to n8n and get back generated Python code.
+
     mode: "app" or "game"
     Returns the code as a string, or "" on failure.
     """
@@ -25,7 +27,45 @@ def call_n8n_generate_code(prompt: str, mode: str) -> str:
         return code
     except Exception as e:
         st.error(f"Error contacting n8n: {e}")
+        st.code(traceback.format_exc())
         return ""
+
+
+def run_generated_code(code: str):
+    """
+    Execute the given Python code and run render_app() if present.
+    Shows detailed errors if anything goes wrong.
+    """
+    if not code.strip():
+        st.error("No code to run.")
+        return
+
+    # Inject Streamlit into the execution namespace
+    local_ns = {"st": st}
+
+    # Step 1: exec the code
+    try:
+        exec(code, local_ns, local_ns)
+    except Exception:
+        st.error("Error while executing generated code.")
+        st.code(traceback.format_exc())
+        return
+
+    # Step 2: find and call render_app()
+    render_func = local_ns.get("render_app")
+    if not callable(render_func):
+        st.error(
+            "render_app() function not found in generated code.\n"
+            "Ensure your n8n AI Agent always defines:\n"
+            "    def render_app():\n"
+        )
+        return
+
+    try:
+        render_func()
+    except Exception:
+        st.error("Error while running render_app() from generated code.")
+        st.code(traceback.format_exc())
 
 
 def main():
@@ -36,9 +76,9 @@ def main():
 
     st.title("🧠 AI-Powered Web App/Game Generator")
     st.write(
-        "Describe the app or game you want. "
-        "On click of **Generate & Run**, your idea is sent to an n8n workflow, "
-        "an LLM generates Streamlit code, and the app/game opens below."
+        "Describe the app or game you want. When you click **Generate & Run**, "
+        "your idea is sent to an n8n workflow, an LLM generates Streamlit code, "
+        "and the app/game opens directly below on this page."
     )
 
     # Sidebar instructions
@@ -55,7 +95,7 @@ def main():
         st.markdown("---")
         st.markdown("**Backend:** n8n + LLM\n**Frontend:** Streamlit")
 
-    # Prompt input
+    # User prompt
     prompt = st.text_area(
         "Describe the app or game you want to generate:",
         height=150,
@@ -64,23 +104,24 @@ def main():
             "- A simple calculator with history\n"
             "- A to-do list app with add/delete/complete\n"
             "- A number guessing game\n"
-            "- A small snake game with arrow buttons\n"
+            "- A snake game with arrow buttons\n"
         ),
     )
 
+    # Mode selector
     mode_label = st.radio(
         "Select what you want to generate:",
         options=["App", "Game"],
-        index=1,  # default to Game if you like
+        index=1,
         horizontal=True,
     )
     mode_value = "app" if mode_label == "App" else "game"
 
-    # Keep latest code in session (for debugging or re-run if needed)
+    # Keep latest code in session (so app can persist across reruns)
     if "generated_code" not in st.session_state:
         st.session_state["generated_code"] = ""
 
-    # Main action button: Generate + Run
+    # Main button: Generate & Run
     if st.button("🎮 Generate & Run", type="primary"):
         if not prompt.strip():
             st.warning("Please enter a description for your app or game first.")
@@ -94,38 +135,13 @@ def main():
                     )
                 else:
                     st.session_state["generated_code"] = code
-
-                    # Prepare shared namespace and inject Streamlit
-                    local_ns = {"st": st}
-                    try:
-                        # Execute generated code; imports and functions land in local_ns
-                        exec(code, local_ns, local_ns)
-
-                        render_func = local_ns.get("render_app")
-                        if callable(render_func):
-                            st.info("Running generated app below 👇")
-                            render_func()
-                        else:
-                            st.error(
-                                "render_app() function not found in generated code.\n"
-                                "Ensure your n8n AI Agent always defines:\n"
-                                "    def render_app():\n"
-                            )
-                    except Exception as e:
-                        st.error(f"Error while running the generated app: {e}")
+                    st.info("Running generated app below 👇")
+                    run_generated_code(code)
     else:
-        # If user already generated something in this session, allow re-render on refresh
+        # If we already generated something earlier in this session,
+        # show it again on page reload.
         if st.session_state.get("generated_code"):
-            local_ns = {"st": st}
-            try:
-                exec(st.session_state["generated_code"], local_ns, local_ns)
-                render_func = local_ns.get("render_app")
-                if callable(render_func):
-                    st.info("Last generated app is shown below 👇")
-                    render_func()
-            except Exception:
-                # Silent failure here; main path is the button above
-                pass
+            run_generated_code(st.session_state["generated_code"])
 
 
 if __name__ == "__main__":
